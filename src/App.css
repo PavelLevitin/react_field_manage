@@ -1,0 +1,93 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: Arial, sans-serif;
+}
+
+.main-content {
+  display: flex;
+  width: 90%;
+  margin-top: 20px;
+}
+
+h1 {
+  margin-top: 20px;
+}
+
+.grid {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 15px;
+}
+
+.field-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.responsive-component {
+  width: 150px;
+  height: 200px;
+  background-image: url("./images/soccer.png");
+  background-size: cover;
+  border: 1px solid black;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-right: 15px;
+  position: relative;
+}
+
+.sidebar {
+  width: 60px;
+  height: 500px;
+  display: flex;
+  position: fixed;
+  flex-direction: column;
+  justify-content: flex-start;
+  background-color: lightgray;
+  border: 1px solid black;
+  margin-left: 90%;
+  padding-top: 10px;
+}
+
+.draggable-button {
+  margin-top: 15px;
+  background-color: lightgray;
+  border: 1px solid black;
+  cursor: grab;
+}
+
+.add-button,
+.remove-button,
+.set-button,
+.download-button {
+  margin-top: 10px;
+  background-color: rgb(215, 75, 92);
+  color: white;
+  border: none;
+  cursor: pointer;
+  padding: 5px;
+  text-align: center;
+}
+
+.add-button:hover,
+.remove-button:hover,
+.set-button:hover,
+.download-button:hover {
+  background-color: darkgreen;
+}
+
+.dropped-button {
+  font-weight: bolder;
+  cursor: pointer;
+}
