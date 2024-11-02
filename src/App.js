@@ -30,7 +30,7 @@ const App = () => {
       'שמנים א',
     ])
   );
-  const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(new Date()); // Set today's date as default
 
   useEffect(() => {
     saveStateToLocalStorage('fieldState', containers);
