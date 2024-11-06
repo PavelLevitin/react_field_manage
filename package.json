@@ -2,6 +2,7 @@
   "name": "basic",
   "version": "0.1.0",
   "private": true,
+  
   "dependencies": {
     "@date-io/date-fns": "^3.0.0",
     "@emotion/react": "^11.13.3",

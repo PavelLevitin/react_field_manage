@@ -31,6 +31,7 @@ const App = () => {
       'שמנים א',
     ])
   );
+  
   const [selectedDate, setSelectedDate] = useState(new Date());
 
   useEffect(() => {
