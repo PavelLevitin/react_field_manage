@@ -4,7 +4,6 @@ import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { he } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
-import { Button, ButtonGroup, Container } from 'react-bootstrap';
 
 const initialContainers = Array.from({ length: 12 }, () => []);
 
@@ -31,8 +30,7 @@ const App = () => {
       'שמנים א',
     ])
   );
-  
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date()); // Set today's date as default
 
   useEffect(() => {
     saveStateToLocalStorage('fieldState', containers);
@@ -171,40 +169,36 @@ const App = () => {
           )}
         </div>
 
-        <Container className="sidebar p-2 bg-light border">
+        <aside className="sidebar">
           {buttons.map((button, index) => (
-            <Button
+            <button
               key={index}
               draggable
               onDragStart={(e) => onDragStart(e, button)}
-              className="draggable-button my-2"
-              variant="outline-secondary"
+              className="draggable-button"
             >
               {button}
-            </Button>
+            </button>
           ))}
-          <ButtonGroup vertical>
-            <Button className="add-button my-2" onClick={addButton} variant="primary">
-              הוסף קבוצה
-            </Button>
-            <Button className="remove-button my-2" onClick={removeButton} variant="danger">
-              הסר קבוצה
-            </Button>
-            <Button className="set-button my-2" onClick={saveDataToLocalStorage} variant="success">
-              Set
-            </Button>
-            <Button className="download-button my-2" onClick={downloadExcel} variant="info">
-              download excel
-            </Button>
-            <Button className="clear-button my-2" onClick={clearAllData} variant="warning">
-              Clear All
-            </Button>
-          </ButtonGroup>
-        </Container>
+          <button className="add-button" onClick={addButton}>
+            הוסף קבוצה
+          </button>
+          <button className="remove-button" onClick={removeButton}>
+            הסר קבוצה
+          </button>
+          <button className="set-button" onClick={saveDataToLocalStorage}>
+            Set
+          </button>
+          <button className="download-button" onClick={downloadExcel}>
+            download excel
+          </button>
+          <button className="clear-button" onClick={clearAllData}>
+            Clear All
+          </button>
+        </aside>
       </div>
     </div>
   );
 };
-
 
 export default App;
