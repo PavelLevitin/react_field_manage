@@ -134,7 +134,9 @@ export default function Home() {
   };
 
   const downloadExcel = () => {
-    const gridRows = buildGridRows();
+    const [y, m, d] = selectedDate.split('-');
+    const formattedDate = `${d}/${m}/${y}`;
+    const gridRows = [['תאריך:', formattedDate], [], ...buildGridRows()];
     const ws = XLSX.utils.aoa_to_sheet(gridRows);
 
     const border = {
