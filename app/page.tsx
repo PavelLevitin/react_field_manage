@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const FIELD_TITLES = ['וסרמיל 1', 'וסרמיל 2', 'וסרמיל 3', 'וסרמיל 4'];
 const TIME_SLOTS = ['16:00 - 17:45', '18:00 - 19:45', '20:00 - 21:45'];
@@ -118,19 +120,76 @@ export default function Home() {
     setEditingTeam(null);
   };
 
+  const buildGridRows = () => {
+    const gridRows: string[][] = [['', ...FIELD_TITLES]];
+    TIME_SLOTS.forEach((time, rowIndex) => {
+      gridRows.push([time, '', '', '', '']);
+      const slots = FIELD_TITLES.map((_, colIndex) => containers[rowIndex * 4 + colIndex]);
+      const maxTeams = Math.max(...slots.map(s => s.length), 0);
+      for (let i = 0; i < maxTeams; i++) {
+        gridRows.push(['', ...slots.map(s => s[i] ?? '')]);
+      }
+    });
+    return gridRows;
+  };
+
   const downloadExcel = () => {
-    const rows = containers.flatMap((slot, i) =>
-      slot.map(team => ({
-        'קבוצה': team,
-        'מגרש': FIELD_TITLES[i % 4],
-        'שעות': TIME_SLOTS[Math.floor(i / 4)],
-        'תאריך': selectedDate,
-      }))
-    );
-    const ws = XLSX.utils.json_to_sheet(rows);
+    const gridRows = buildGridRows();
+    const ws = XLSX.utils.aoa_to_sheet(gridRows);
+
+    const border = {
+      top: { style: 'thin', color: { rgb: '000000' } },
+      bottom: { style: 'thin', color: { rgb: '000000' } },
+      left: { style: 'thin', color: { rgb: '000000' } },
+      right: { style: 'thin', color: { rgb: '000000' } },
+    };
+
+    const range = XLSX.utils.decode_range(ws['!ref'] ?? 'A1');
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const addr = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[addr]) ws[addr] = { t: 's', v: '' };
+        ws[addr].s = { border };
+      }
+    }
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Schedule');
     XLSX.writeFile(wb, 'schedule.xlsx');
+  };
+
+  const downloadPDF = async () => {
+    const gridRows = buildGridRows();
+
+    const div = document.createElement('div');
+    div.style.cssText = 'position:absolute;left:-9999px;direction:rtl;font-family:Arial,sans-serif;background:white;padding:20px;width:700px;';
+
+    const tableRows = gridRows.map((row, i) => {
+      const isHeader = i === 0;
+      const isTimeSlot = i > 0 && row[1] === '' && row[0] !== '';
+      const bg = isHeader ? '#6d28d9' : isTimeSlot ? '#ede9fe' : i % 2 === 0 ? '#f9f9f9' : 'white';
+      const color = isHeader ? 'white' : '#1f2937';
+      const fontWeight = isHeader || isTimeSlot ? 'bold' : 'normal';
+      const cells = row.map(cell =>
+        `<td style="border:1px solid #ccc;padding:7px 10px;text-align:center;font-weight:${fontWeight};color:${color};">${cell}</td>`
+      ).join('');
+      return `<tr style="background:${bg};">${cells}</tr>`;
+    }).join('');
+
+    div.innerHTML = `
+      <h2 style="margin-bottom:12px;font-size:15px;">לוח זמנים - ${selectedDate}</h2>
+      <table style="border-collapse:collapse;width:100%;font-size:12px;">${tableRows}</table>
+    `;
+
+    document.body.appendChild(div);
+    const canvas = await html2canvas(div, { scale: 2 });
+    document.body.removeChild(div);
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const imgWidth = 190;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    doc.addImage(canvas.toDataURL('image/png'), 'PNG', 10, 10, imgWidth, imgHeight);
+    doc.save('schedule.pdf');
   };
 
   const clearAll = () => {
@@ -196,7 +255,7 @@ export default function Home() {
       </main>
 
       {/* Scalable Sidebar */}
-      <aside style={{ width: sidebarWidth }} className="shrink-0 bg-white border-r border-gray-200 shadow-sm flex flex-col relative">
+      <aside style={{ width: sidebarWidth }} className="shrink-0 bg-white border-r border-gray-200 shadow-sm flex flex-col relative h-full">
         {/* Resize handle */}
         <div
           onMouseDown={onResizeStart}
@@ -235,6 +294,12 @@ export default function Home() {
             ייצוא Excel
           </button>
           <button
+            onClick={downloadPDF}
+            className="w-full text-sm py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium transition-colors"
+          >
+            ייצוא PDF
+          </button>
+          <button
             onClick={() => setClearConfirmOpen(true)}
             className="w-full text-sm py-2 rounded-lg bg-yellow-400 hover:bg-yellow-500 text-gray-800 font-medium transition-colors"
           >
@@ -246,7 +311,7 @@ export default function Home() {
       {/* Manage Teams Modal */}
       {manageOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setManageOpen(false); setConfirmRemove(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-80 max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-96 max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
             {/* Modal header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-base font-bold text-gray-800">ניהול קבוצות</h2>
