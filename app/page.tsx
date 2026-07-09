@@ -176,8 +176,10 @@ export default function Home() {
       return `<tr style="background:${bg};">${cells}</tr>`;
     }).join('');
 
+    const [y, m, d] = selectedDate.split('-');
+    const formattedDate = `${d}/${m}/${y}`;
     div.innerHTML = `
-      <h2 style="margin-bottom:12px;font-size:15px;">לוח זמנים - ${selectedDate}</h2>
+      <h2 style="margin-bottom:12px;font-size:15px;">לוח זמנים - ${formattedDate}</h2>
       <table style="border-collapse:collapse;width:100%;font-size:12px;">${tableRows}</table>
     `;
 
