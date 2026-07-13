@@ -5,23 +5,40 @@ import * as XLSX from 'xlsx-js-style';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
+const BASE_PATH = '/fields';
 const FIELD_TITLES = ['וסרמיל 1', 'וסרמיל 2', 'וסרמיל 3', 'וסרמיל 4'];
 const TIME_SLOTS = ['16:00 - 17:45', '18:00 - 19:45', '20:00 - 21:45'];
 const INITIAL_TEAMS = ['ילדים א', 'נערים א', 'נערים ב', 'ילדים ג', 'שמנים ד', 'שמנים א'];
 const INITIAL_CONTAINERS: string[][] = Array.from({ length: 12 }, () => []);
 
-function load<T>(key: string, fallback: T): T {
-  if (typeof window === 'undefined') return fallback;
-  try {
-    const val = localStorage.getItem(key);
-    return val ? JSON.parse(val) : fallback;
-  } catch {
-    return fallback;
-  }
+async function fetchTeams(): Promise<string[]> {
+  const res = await fetch(`${BASE_PATH}/api/teams`);
+  const data = await res.json();
+  return Array.isArray(data.teams) ? data.teams : INITIAL_TEAMS;
 }
 
-function saveToStorage(key: string, value: unknown) {
-  localStorage.setItem(key, JSON.stringify(value));
+async function fetchSchedule(date: string): Promise<string[][]> {
+  const res = await fetch(`${BASE_PATH}/api/schedule?date=${date}`);
+  const data = await res.json();
+  return Array.isArray(data.containers) ? data.containers : INITIAL_CONTAINERS;
+}
+
+function saveSchedule(date: string, containers: string[][]) {
+  fetch(`${BASE_PATH}/api/schedule`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date, containers }),
+  }).catch(() => {});
+}
+
+async function teamsAction(body: Record<string, string>): Promise<string[]> {
+  const res = await fetch(`${BASE_PATH}/api/teams`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  return Array.isArray(data.teams) ? data.teams : [];
 }
 
 export default function Home() {
@@ -35,7 +52,29 @@ export default function Home() {
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<{ original: string; value: string } | null>(null);
+  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
+  const [isDesktop, setIsDesktop] = useState(false);
   const isResizing = useRef(false);
+  const lastTap = useRef<{ key: string; time: number } | null>(null);
+  const isFirstDateLoad = useRef(true);
+
+  const handleDoubleTap = (key: string, action: () => void) => {
+    const now = Date.now();
+    if (lastTap.current && lastTap.current.key === key && now - lastTap.current.time < 350) {
+      lastTap.current = null;
+      action();
+    } else {
+      lastTap.current = { key, time: now };
+    }
+  };
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
 
   const onResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -62,62 +101,79 @@ export default function Home() {
     window.addEventListener('mouseup', onUp);
   }, []);
 
+  // Initial load: fetch the team roster and the current date's schedule together.
   useEffect(() => {
-    setContainers(load('fieldState', INITIAL_CONTAINERS));
-    setTeams(load('teamsState', INITIAL_TEAMS));
-    setMounted(true);
+    (async () => {
+      try {
+        const [teamsResult, scheduleResult] = await Promise.all([
+          fetchTeams(),
+          fetchSchedule(selectedDate),
+        ]);
+        setTeams(teamsResult);
+        setContainers(scheduleResult);
+      } finally {
+        setMounted(true);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Re-fetch the schedule whenever the selected date changes (skip the initial mount, handled above).
+  useEffect(() => {
+    if (isFirstDateLoad.current) {
+      isFirstDateLoad.current = false;
+      return;
+    }
+    fetchSchedule(selectedDate).then(setContainers);
+  }, [selectedDate]);
 
   const onDragStart = (e: React.DragEvent, team: string) => {
     e.dataTransfer.setData('team', team);
   };
 
-  const onDrop = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    const team = e.dataTransfer.getData('team');
+  const placeTeamInSlot = (team: string, index: number) => {
     if (!team || containers[index].includes(team) || containers[index].length >= 4) return;
     const next = containers.map(c => [...c]);
     next[index].push(team);
-    saveToStorage('fieldState', next);
     setContainers(next);
+    saveSchedule(selectedDate, next);
+  };
+
+  const onDrop = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    const team = e.dataTransfer.getData('team');
+    placeTeamInSlot(team, index);
   };
 
   const removeFromSlot = (containerIndex: number, team: string) => {
     const next = containers.map((c, i) => (i === containerIndex ? c.filter(t => t !== team) : c));
-    saveToStorage('fieldState', next);
     setContainers(next);
+    saveSchedule(selectedDate, next);
   };
 
-  const addTeam = () => {
+  const addTeam = async () => {
     const name = newTeamInput.trim();
     if (!name) return;
-    const next = [...teams, name];
-    saveToStorage('teamsState', next);
-    setTeams(next);
     setNewTeamInput('');
-  };
-
-  const removeTeam = (name: string) => {
-    const nextTeams = teams.filter(t => t !== name);
-    const nextContainers = containers.map(slot => slot.filter(t => t !== name));
-    saveToStorage('teamsState', nextTeams);
-    saveToStorage('fieldState', nextContainers);
+    const nextTeams = await teamsAction({ action: 'add', name });
     setTeams(nextTeams);
-    setContainers(nextContainers);
   };
 
-  const renameTeam = () => {
+  const removeTeam = async (name: string) => {
+    const nextTeams = await teamsAction({ action: 'remove', name });
+    setTeams(nextTeams);
+    setContainers(prev => prev.map(slot => slot.filter(t => t !== name)));
+  };
+
+  const renameTeam = async () => {
     if (!editingTeam) return;
     const { original, value } = editingTeam;
     const newName = value.trim();
     if (!newName || newName === original) { setEditingTeam(null); return; }
-    const nextTeams = teams.map(t => (t === original ? newName : t));
-    const nextContainers = containers.map(slot => slot.map(t => (t === original ? newName : t)));
-    saveToStorage('teamsState', nextTeams);
-    saveToStorage('fieldState', nextContainers);
-    setTeams(nextTeams);
-    setContainers(nextContainers);
     setEditingTeam(null);
+    const nextTeams = await teamsAction({ action: 'rename', original, name: newName });
+    setTeams(nextTeams);
+    setContainers(prev => prev.map(slot => slot.map(t => (t === original ? newName : t))));
   };
 
   const buildGridRows = () => {
@@ -197,17 +253,17 @@ export default function Home() {
   };
 
   const clearAll = () => {
-    saveToStorage('fieldState', INITIAL_CONTAINERS);
     setContainers(INITIAL_CONTAINERS);
+    saveSchedule(selectedDate, INITIAL_CONTAINERS);
     setClearConfirmOpen(false);
   };
 
   return (
-    <div className="flex h-full bg-gray-50">
+    <div className="flex flex-col md:flex-row h-full bg-gray-50">
       {/* Main grid area */}
-      <main className="flex-1 overflow-y-auto p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">ניהול זמני מגרש</h1>
+      <main className="flex-1 overflow-y-auto p-3 sm:p-6 order-2 md:order-1">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4 sm:mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">ניהול זמני מגרש</h1>
           <input
             type="date"
             value={selectedDate}
@@ -222,7 +278,7 @@ export default function Home() {
               <h2 className="text-lg font-semibold text-gray-700 mb-3 pb-1 border-b border-gray-200">
                 {time}
               </h2>
-              <div className="grid grid-cols-4 gap-6">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-6">
                 {FIELD_TITLES.map((title, colIndex) => {
                   const slotIndex = rowIndex * 4 + colIndex;
                   return (
@@ -231,18 +287,28 @@ export default function Home() {
                       <div
                         onDrop={e => onDrop(e, slotIndex)}
                         onDragOver={e => e.preventDefault()}
-                        className="w-full min-h-40 rounded-xl border-2 border-dashed border-gray-300 bg-white flex flex-col gap-1.5 p-2 transition-colors hover:border-blue-400 hover:bg-blue-50/30"
+                        onClick={() => handleDoubleTap(`slot-${slotIndex}`, () => {
+                          if (!selectedTeam) return;
+                          placeTeamInSlot(selectedTeam, slotIndex);
+                          setSelectedTeam(null);
+                        })}
                         style={{
-                          backgroundImage: "url('/soccer.png')",
+                          backgroundImage: `url('${BASE_PATH}/soccer.png')`,
                           backgroundSize: 'cover',
                           backgroundPosition: 'center',
+                          touchAction: 'manipulation',
                         }}
+                        className={`w-full min-h-32 sm:min-h-40 rounded-xl border-2 border-dashed flex flex-col gap-1.5 p-2 transition-colors hover:border-blue-400 hover:bg-blue-50/30 ${selectedTeam ? 'border-blue-400 bg-blue-50/30' : 'border-gray-300 bg-white'}`}
                       >
                         {containers[slotIndex]?.map((team, i) => (
                           <div
                             key={i}
-                            onDoubleClick={() => removeFromSlot(slotIndex, team)}
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleDoubleTap(`remove-${slotIndex}-${team}`, () => removeFromSlot(slotIndex, team));
+                            }}
                             title="לחץ פעמיים להסרה"
+                            style={{ touchAction: 'manipulation' }}
                             className="bg-white/90 text-gray-800 text-xs font-bold rounded-lg px-2 py-1.5 text-center cursor-pointer shadow-sm hover:bg-red-50 hover:text-red-600 transition-colors"
                           >
                             {team}
@@ -259,24 +325,33 @@ export default function Home() {
       </main>
 
       {/* Scalable Sidebar */}
-      <aside style={{ width: sidebarWidth }} className="shrink-0 bg-white border-r border-gray-200 shadow-sm flex flex-col relative h-full">
-        {/* Resize handle */}
+      <aside
+        style={isDesktop ? { width: sidebarWidth } : undefined}
+        className="w-full md:w-auto shrink-0 bg-white border-b md:border-b-0 md:border-r border-gray-200 shadow-sm flex flex-col relative h-auto md:h-full order-1 md:order-2"
+      >
+        {/* Resize handle (desktop only) */}
         <div
           onMouseDown={onResizeStart}
-          className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-blue-400 transition-colors z-10"
+          className="hidden md:block absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-blue-400 transition-colors z-10"
         />
         <div className="px-4 py-3 border-b border-gray-100">
           <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide">קבוצות</h2>
         </div>
 
-        {/* Teams list — scrollable, grows with content */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-1.5 w-full">
+        {/* Teams list — horizontal scroll on mobile, vertical on desktop */}
+        <div className="flex flex-row md:flex-col overflow-x-auto md:overflow-y-auto flex-1 gap-1.5 p-3 w-full">
           {teams.map((team, i) => (
             <div
               key={i}
-              draggable
+              draggable={isDesktop}
               onDragStart={e => onDragStart(e, team)}
-              className="bg-blue-50 border border-blue-200 text-blue-900 font-semibold text-sm rounded-lg px-3 py-2 cursor-grab active:cursor-grabbing hover:bg-blue-100 hover:border-blue-300 transition-colors text-center select-none whitespace-nowrap"
+              onClick={() => setSelectedTeam(t => (t === team ? null : team))}
+              style={{ touchAction: 'manipulation' }}
+              className={`shrink-0 border font-semibold text-sm rounded-lg px-3 py-2 cursor-grab active:cursor-grabbing transition-colors text-center select-none whitespace-nowrap ${
+                selectedTeam === team
+                  ? 'bg-red-500 border-red-600 text-white ring-2 ring-red-300'
+                  : 'bg-blue-50 border-blue-200 text-blue-900 hover:bg-blue-100 hover:border-blue-300'
+              }`}
             >
               {team}
             </div>
@@ -315,7 +390,7 @@ export default function Home() {
       {/* Manage Teams Modal */}
       {manageOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setManageOpen(false); setConfirmRemove(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-96 max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[90vw] sm:w-96 max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
             {/* Modal header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-base font-bold text-gray-800">ניהול קבוצות</h2>
@@ -396,7 +471,7 @@ export default function Home() {
       {/* Clear All Confirmation Modal */}
       {clearConfirmOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setClearConfirmOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-72 p-6 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[85vw] sm:w-72 p-6 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
             <div className="flex flex-col items-center gap-2 text-center">
               <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-2xl">⚠️</div>
               <h2 className="text-base font-bold text-gray-800">נקה את כל המגרשים?</h2>
