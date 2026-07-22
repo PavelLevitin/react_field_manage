@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
-  if (!body || typeof body.date !== 'string' || !Array.isArray(body.containers)) {
+  if (!body || typeof body.date !== 'string' || typeof body.containers !== 'object' || Array.isArray(body.containers)) {
     return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
   }
   await saveSchedule(body.date, body.containers);

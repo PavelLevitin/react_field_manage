@@ -6,10 +6,24 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
 const BASE_PATH = '/fields';
-const FIELD_TITLES = ['וסרמיל 1', 'וסרמיל 2', 'וסרמיל 3', 'וסרמיל 4'];
 const TIME_SLOTS = ['16:00 - 17:45', '18:00 - 19:45', '20:00 - 21:45'];
 const INITIAL_TEAMS = ['ילדים א', 'נערים א', 'נערים ב', 'ילדים ג', 'שמנים ד', 'שמנים א'];
-const INITIAL_CONTAINERS: string[][] = Array.from({ length: 12 }, () => []);
+const INITIAL_FIELDS = ['וסרמיל 1', 'וסרמיל 2', 'וסרמיל 3', 'וסרמיל 4'];
+
+// Tailwind needs literal class names in source to include them in the build,
+// so desktop column counts are looked up rather than interpolated.
+const FIELD_COLS_CLASS: Record<number, string> = {
+  1: 'sm:grid-cols-1', 2: 'sm:grid-cols-2', 3: 'sm:grid-cols-3', 4: 'sm:grid-cols-4',
+  5: 'sm:grid-cols-5', 6: 'sm:grid-cols-6', 7: 'sm:grid-cols-7', 8: 'sm:grid-cols-8',
+};
+
+type DateSchedule = Record<string, string[][]>;
+
+function emptyFieldSlots(): string[][] {
+  return Array.from({ length: TIME_SLOTS.length }, () => []);
+}
+
+const INITIAL_CONTAINERS: DateSchedule = Object.fromEntries(INITIAL_FIELDS.map(f => [f, emptyFieldSlots()]));
 
 async function fetchTeams(): Promise<string[]> {
   const res = await fetch(`${BASE_PATH}/api/teams`);
@@ -17,13 +31,19 @@ async function fetchTeams(): Promise<string[]> {
   return Array.isArray(data.teams) ? data.teams : INITIAL_TEAMS;
 }
 
-async function fetchSchedule(date: string): Promise<string[][]> {
-  const res = await fetch(`${BASE_PATH}/api/schedule?date=${date}`);
+async function fetchFields(): Promise<string[]> {
+  const res = await fetch(`${BASE_PATH}/api/fields`);
   const data = await res.json();
-  return Array.isArray(data.containers) ? data.containers : INITIAL_CONTAINERS;
+  return Array.isArray(data.fields) ? data.fields : INITIAL_FIELDS;
 }
 
-async function fetchAllSchedules(): Promise<Record<string, string[][]>> {
+async function fetchSchedule(date: string): Promise<DateSchedule> {
+  const res = await fetch(`${BASE_PATH}/api/schedule?date=${date}`);
+  const data = await res.json();
+  return data.containers && typeof data.containers === 'object' ? data.containers : {};
+}
+
+async function fetchAllSchedules(): Promise<Record<string, DateSchedule>> {
   const res = await fetch(`${BASE_PATH}/api/schedules`);
   const data = await res.json();
   return data.schedules && typeof data.schedules === 'object' ? data.schedules : {};
@@ -34,7 +54,7 @@ function formatDate(date: string): string {
   return `${d}/${m}/${y}`;
 }
 
-function saveSchedule(date: string, containers: string[][]) {
+function saveSchedule(date: string, containers: DateSchedule) {
   fetch(`${BASE_PATH}/api/schedule`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -52,15 +72,30 @@ async function teamsAction(body: Record<string, string>): Promise<string[]> {
   return Array.isArray(data.teams) ? data.teams : [];
 }
 
+async function fieldsAction(body: Record<string, string>): Promise<string[]> {
+  const res = await fetch(`${BASE_PATH}/api/fields`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  return Array.isArray(data.fields) ? data.fields : [];
+}
+
 export default function Home() {
-  const [containers, setContainers] = useState<string[][]>(INITIAL_CONTAINERS);
+  const [containers, setContainers] = useState<DateSchedule>(INITIAL_CONTAINERS);
   const [teams, setTeams] = useState<string[]>(INITIAL_TEAMS);
+  const [fields, setFields] = useState<string[]>(INITIAL_FIELDS);
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [mounted, setMounted] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(208);
   const [manageOpen, setManageOpen] = useState(false);
   const [newTeamInput, setNewTeamInput] = useState('');
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  const [manageFieldsOpen, setManageFieldsOpen] = useState(false);
+  const [newFieldInput, setNewFieldInput] = useState('');
+  const [confirmRemoveField, setConfirmRemoveField] = useState<string | null>(null);
+  const [editingField, setEditingField] = useState<{ original: string; value: string } | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<{ original: string; value: string } | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
@@ -112,15 +147,17 @@ export default function Home() {
     window.addEventListener('mouseup', onUp);
   }, []);
 
-  // Initial load: fetch the team roster and the current date's schedule together.
+  // Initial load: fetch the team roster, field list, and current date's schedule together.
   useEffect(() => {
     (async () => {
       try {
-        const [teamsResult, scheduleResult] = await Promise.all([
+        const [teamsResult, fieldsResult, scheduleResult] = await Promise.all([
           fetchTeams(),
+          fetchFields(),
           fetchSchedule(selectedDate),
         ]);
         setTeams(teamsResult);
+        setFields(fieldsResult);
         setContainers(scheduleResult);
       } finally {
         setMounted(true);
@@ -142,22 +179,31 @@ export default function Home() {
     e.dataTransfer.setData('team', team);
   };
 
-  const placeTeamInSlot = (team: string, index: number) => {
-    if (!team || containers[index].includes(team) || containers[index].length >= 4) return;
-    const next = containers.map(c => [...c]);
-    next[index].push(team);
+  const placeTeamInSlot = (team: string, field: string, timeSlotIndex: number) => {
+    const currentSlot = containers[field]?.[timeSlotIndex] ?? [];
+    if (!team || currentSlot.includes(team) || currentSlot.length >= 4) return;
+    const next: DateSchedule = {};
+    for (const f of fields) {
+      next[f] = (containers[f] ?? emptyFieldSlots()).map(slot => [...slot]);
+    }
+    next[field][timeSlotIndex] = [...next[field][timeSlotIndex], team];
     setContainers(next);
     saveSchedule(selectedDate, next);
   };
 
-  const onDrop = (e: React.DragEvent, index: number) => {
+  const onDrop = (e: React.DragEvent, field: string, timeSlotIndex: number) => {
     e.preventDefault();
     const team = e.dataTransfer.getData('team');
-    placeTeamInSlot(team, index);
+    placeTeamInSlot(team, field, timeSlotIndex);
   };
 
-  const removeFromSlot = (containerIndex: number, team: string) => {
-    const next = containers.map((c, i) => (i === containerIndex ? c.filter(t => t !== team) : c));
+  const removeFromSlot = (field: string, timeSlotIndex: number, team: string) => {
+    const next: DateSchedule = {};
+    for (const f of fields) {
+      next[f] = (containers[f] ?? emptyFieldSlots()).map((slot, i) =>
+        f === field && i === timeSlotIndex ? slot.filter(t => t !== team) : [...slot]
+      );
+    }
     setContainers(next);
     saveSchedule(selectedDate, next);
   };
@@ -173,7 +219,7 @@ export default function Home() {
   const removeTeam = async (name: string) => {
     const nextTeams = await teamsAction({ action: 'remove', name });
     setTeams(nextTeams);
-    setContainers(prev => prev.map(slot => slot.filter(t => t !== name)));
+    setContainers(prev => Object.fromEntries(Object.entries(prev).map(([f, slots]) => [f, slots.map(slot => slot.filter(t => t !== name))])));
   };
 
   const renameTeam = async () => {
@@ -184,14 +230,49 @@ export default function Home() {
     setEditingTeam(null);
     const nextTeams = await teamsAction({ action: 'rename', original, name: newName });
     setTeams(nextTeams);
-    setContainers(prev => prev.map(slot => slot.map(t => (t === original ? newName : t))));
+    setContainers(prev => Object.fromEntries(Object.entries(prev).map(([f, slots]) => [f, slots.map(slot => slot.map(t => (t === original ? newName : t)))])));
   };
 
-  const buildGridRows = (source: string[][]) => {
-    const gridRows: string[][] = [['', ...FIELD_TITLES]];
+  const addField = async () => {
+    const name = newFieldInput.trim();
+    if (!name) return;
+    setNewFieldInput('');
+    const nextFields = await fieldsAction({ action: 'add', name });
+    setFields(nextFields);
+  };
+
+  const removeField = async (name: string) => {
+    const nextFields = await fieldsAction({ action: 'remove', name });
+    setFields(nextFields);
+    setContainers(prev => {
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+  };
+
+  const renameField = async () => {
+    if (!editingField) return;
+    const { original, value } = editingField;
+    const newName = value.trim();
+    if (!newName || newName === original) { setEditingField(null); return; }
+    setEditingField(null);
+    const nextFields = await fieldsAction({ action: 'rename', original, name: newName });
+    setFields(nextFields);
+    setContainers(prev => {
+      if (!(original in prev)) return prev;
+      const next = { ...prev };
+      next[newName] = next[original];
+      delete next[original];
+      return next;
+    });
+  };
+
+  const buildGridRows = (schedule: DateSchedule, fieldList: string[]) => {
+    const gridRows: string[][] = [['', ...fieldList]];
     TIME_SLOTS.forEach((time, rowIndex) => {
-      gridRows.push([time, '', '', '', '']);
-      const slots = FIELD_TITLES.map((_, colIndex) => source[rowIndex * 4 + colIndex]);
+      gridRows.push([time, ...fieldList.map(() => '')]);
+      const slots = fieldList.map(f => schedule[f]?.[rowIndex] ?? []);
       const maxTeams = Math.max(...slots.map(s => s.length), 0);
       for (let i = 0; i < maxTeams; i++) {
         gridRows.push(['', ...slots.map(s => s[i] ?? '')]);
@@ -201,10 +282,10 @@ export default function Home() {
   };
 
   // Gathers every date that has at least one team assigned, oldest to newest.
-  const getDatedSchedules = async (): Promise<[string, string[][]][]> => {
+  const getDatedSchedules = async (): Promise<[string, DateSchedule][]> => {
     const schedules = await fetchAllSchedules();
     return Object.entries(schedules)
-      .filter(([, c]) => c.some(slot => slot.length > 0))
+      .filter(([, schedule]) => Object.values(schedule).some(slots => slots.some(s => s.length > 0)))
       .sort(([a], [b]) => a.localeCompare(b));
   };
 
@@ -220,7 +301,7 @@ export default function Home() {
     };
 
     datedSchedules.forEach(([date, schedule]) => {
-      const gridRows = [['תאריך:', formatDate(date)], [], ...buildGridRows(schedule)];
+      const gridRows = [['תאריך:', formatDate(date)], [], ...buildGridRows(schedule, fields)];
       const ws = XLSX.utils.aoa_to_sheet(gridRows);
 
       const range = XLSX.utils.decode_range(ws['!ref'] ?? 'A1');
@@ -246,7 +327,7 @@ export default function Home() {
 
     for (let i = 0; i < datedSchedules.length; i++) {
       const [date, schedule] = datedSchedules[i];
-      const gridRows = buildGridRows(schedule);
+      const gridRows = buildGridRows(schedule, fields);
 
       const div = document.createElement('div');
       div.style.cssText = 'position:absolute;left:-9999px;direction:rtl;font-family:Arial,sans-serif;background:white;padding:20px;width:700px;';
@@ -282,8 +363,9 @@ export default function Home() {
   };
 
   const clearAll = () => {
-    setContainers(INITIAL_CONTAINERS);
-    saveSchedule(selectedDate, INITIAL_CONTAINERS);
+    const next = Object.fromEntries(fields.map(f => [f, emptyFieldSlots()]));
+    setContainers(next);
+    saveSchedule(selectedDate, next);
     setClearConfirmOpen(false);
   };
 
@@ -302,51 +384,48 @@ export default function Home() {
         </div>
 
         <div className="space-y-8">
-          {TIME_SLOTS.map((time, rowIndex) => (
-            <section key={rowIndex}>
+          {TIME_SLOTS.map((time, timeSlotIndex) => (
+            <section key={timeSlotIndex}>
               <h2 className="text-lg font-semibold text-gray-700 mb-3 pb-1 border-b border-gray-200">
                 {time}
               </h2>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-6">
-                {FIELD_TITLES.map((title, colIndex) => {
-                  const slotIndex = rowIndex * 4 + colIndex;
-                  return (
-                    <div key={colIndex} className="flex flex-col items-center gap-2">
-                      <h3 className="text-sm font-semibold text-gray-600">{title}</h3>
-                      <div
-                        onDrop={e => onDrop(e, slotIndex)}
-                        onDragOver={e => e.preventDefault()}
-                        onClick={() => handleDoubleTap(`slot-${slotIndex}`, () => {
-                          if (!selectedTeam) return;
-                          placeTeamInSlot(selectedTeam, slotIndex);
-                          setSelectedTeam(null);
-                        })}
-                        style={{
-                          backgroundImage: `url('${BASE_PATH}/soccer.png')`,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
-                          touchAction: 'manipulation',
-                        }}
-                        className={`w-full min-h-32 sm:min-h-40 rounded-xl border-2 border-dashed flex flex-col gap-1.5 p-2 transition-colors hover:border-blue-400 hover:bg-blue-50/30 ${selectedTeam ? 'border-blue-400 bg-blue-50/30' : 'border-gray-300 bg-white'}`}
-                      >
-                        {containers[slotIndex]?.map((team, i) => (
-                          <div
-                            key={i}
-                            onClick={e => {
-                              e.stopPropagation();
-                              handleDoubleTap(`remove-${slotIndex}-${team}`, () => removeFromSlot(slotIndex, team));
-                            }}
-                            title="לחץ פעמיים להסרה"
-                            style={{ touchAction: 'manipulation' }}
-                            className="bg-white/90 text-gray-800 text-xs font-bold rounded-lg px-2 py-1.5 text-center cursor-pointer shadow-sm hover:bg-red-50 hover:text-red-600 transition-colors"
-                          >
-                            {team}
-                          </div>
-                        ))}
-                      </div>
+              <div className={`grid grid-cols-2 ${FIELD_COLS_CLASS[fields.length] ?? 'sm:grid-cols-4'} gap-3 sm:gap-6`}>
+                {fields.map(field => (
+                  <div key={field} className="flex flex-col items-center gap-2">
+                    <h3 className="text-sm font-semibold text-gray-600">{field}</h3>
+                    <div
+                      onDrop={e => onDrop(e, field, timeSlotIndex)}
+                      onDragOver={e => e.preventDefault()}
+                      onClick={() => handleDoubleTap(`slot-${field}-${timeSlotIndex}`, () => {
+                        if (!selectedTeam) return;
+                        placeTeamInSlot(selectedTeam, field, timeSlotIndex);
+                        setSelectedTeam(null);
+                      })}
+                      style={{
+                        backgroundImage: `url('${BASE_PATH}/soccer.png')`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        touchAction: 'manipulation',
+                      }}
+                      className={`w-full min-h-32 sm:min-h-40 rounded-xl border-2 border-dashed flex flex-col gap-1.5 p-2 transition-colors hover:border-blue-400 hover:bg-blue-50/30 ${selectedTeam ? 'border-blue-400 bg-blue-50/30' : 'border-gray-300 bg-white'}`}
+                    >
+                      {(containers[field]?.[timeSlotIndex] ?? []).map((team, i) => (
+                        <div
+                          key={i}
+                          onClick={e => {
+                            e.stopPropagation();
+                            handleDoubleTap(`remove-${field}-${timeSlotIndex}-${team}`, () => removeFromSlot(field, timeSlotIndex, team));
+                          }}
+                          title="לחץ פעמיים להסרה"
+                          style={{ touchAction: 'manipulation' }}
+                          className="bg-white/90 text-gray-800 text-xs font-bold rounded-lg px-2 py-1.5 text-center cursor-pointer shadow-sm hover:bg-red-50 hover:text-red-600 transition-colors"
+                        >
+                          {team}
+                        </div>
+                      ))}
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             </section>
           ))}
@@ -394,6 +473,12 @@ export default function Home() {
             className="w-full text-sm py-2 rounded-lg bg-purple-500 hover:bg-purple-600 text-white font-medium transition-colors"
           >
             ניהול קבוצות
+          </button>
+          <button
+            onClick={() => setManageFieldsOpen(true)}
+            className="w-full text-sm py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white font-medium transition-colors"
+          >
+            ניהול מגרשים
           </button>
           <button
             onClick={downloadExcel}
@@ -488,6 +573,87 @@ export default function Home() {
                 <button
                   onClick={addTeam}
                   className="bg-purple-500 hover:bg-purple-600 text-white rounded-lg px-3 py-2 text-sm font-bold transition-colors"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manage Fields Modal */}
+      {manageFieldsOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setManageFieldsOpen(false); setConfirmRemoveField(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[90vw] sm:w-96 max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h2 className="text-base font-bold text-gray-800">ניהול מגרשים</h2>
+              <button onClick={() => { setManageFieldsOpen(false); setConfirmRemoveField(null); }} className="text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none">✕</button>
+            </div>
+
+            {/* Fields list */}
+            <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
+              {fields.map((field, i) => (
+                <div key={i} className="flex items-center bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 gap-2">
+                  {editingField?.original === field ? (
+                    <>
+                      <input
+                        autoFocus
+                        value={editingField.value}
+                        onChange={e => setEditingField({ ...editingField, value: e.target.value })}
+                        onKeyDown={e => { if (e.key === 'Enter') renameField(); if (e.key === 'Escape') setEditingField(null); }}
+                        className="flex-1 text-sm border border-indigo-300 rounded-md px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      />
+                      <button onClick={renameField} className="text-xs bg-indigo-500 hover:bg-indigo-600 text-white rounded-md px-2 py-0.5 transition-colors">שמור</button>
+                      <button onClick={() => setEditingField(null)} className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md px-2 py-0.5 transition-colors">ביטול</button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-sm font-medium text-gray-800 flex-1">{field}</span>
+                      {confirmRemoveField === field ? (
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => { removeField(field); setConfirmRemoveField(null); }} className="text-xs bg-red-500 hover:bg-red-600 text-white rounded-md px-2 py-0.5 transition-colors">הסר</button>
+                          <button onClick={() => setConfirmRemoveField(null)} className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md px-2 py-0.5 transition-colors">ביטול</button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => { setConfirmRemoveField(null); setEditingField({ original: field, value: field }); }}
+                            className="text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-full w-6 h-6 flex items-center justify-center transition-colors text-sm"
+                            title="ערוך שם"
+                          >
+                            ✎
+                          </button>
+                          <button
+                            onClick={() => { setEditingField(null); setConfirmRemoveField(field); }}
+                            className="text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full w-6 h-6 flex items-center justify-center transition-colors text-lg leading-none"
+                            title="הסר מגרש"
+                          >
+                            −
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Add new field */}
+            <div className="px-5 py-4 border-t border-gray-100">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newFieldInput}
+                  onChange={e => setNewFieldInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addField()}
+                  placeholder="שם מגרש חדש..."
+                  className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                />
+                <button
+                  onClick={addField}
+                  className="bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-bold transition-colors"
                 >
                   +
                 </button>
