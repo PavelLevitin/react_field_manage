@@ -66,6 +66,11 @@ export async function getSchedule(date: string): Promise<string[][]> {
   return db.schedules[date] ?? emptySchedule();
 }
 
+export async function getAllSchedules(): Promise<Record<string, string[][]>> {
+  const db = await readDbFile();
+  return db.schedules;
+}
+
 export function saveSchedule(date: string, containers: string[][]): Promise<void> {
   return withDb(db => {
     db.schedules[date] = containers;

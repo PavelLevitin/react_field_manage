@@ -23,6 +23,17 @@ async function fetchSchedule(date: string): Promise<string[][]> {
   return Array.isArray(data.containers) ? data.containers : INITIAL_CONTAINERS;
 }
 
+async function fetchAllSchedules(): Promise<Record<string, string[][]>> {
+  const res = await fetch(`${BASE_PATH}/api/schedules`);
+  const data = await res.json();
+  return data.schedules && typeof data.schedules === 'object' ? data.schedules : {};
+}
+
+function formatDate(date: string): string {
+  const [y, m, d] = date.split('-');
+  return `${d}/${m}/${y}`;
+}
+
 function saveSchedule(date: string, containers: string[][]) {
   fetch(`${BASE_PATH}/api/schedule`, {
     method: 'POST',
@@ -176,11 +187,11 @@ export default function Home() {
     setContainers(prev => prev.map(slot => slot.map(t => (t === original ? newName : t))));
   };
 
-  const buildGridRows = () => {
+  const buildGridRows = (source: string[][]) => {
     const gridRows: string[][] = [['', ...FIELD_TITLES]];
     TIME_SLOTS.forEach((time, rowIndex) => {
       gridRows.push([time, '', '', '', '']);
-      const slots = FIELD_TITLES.map((_, colIndex) => containers[rowIndex * 4 + colIndex]);
+      const slots = FIELD_TITLES.map((_, colIndex) => source[rowIndex * 4 + colIndex]);
       const maxTeams = Math.max(...slots.map(s => s.length), 0);
       for (let i = 0; i < maxTeams; i++) {
         gridRows.push(['', ...slots.map(s => s[i] ?? '')]);
@@ -189,11 +200,17 @@ export default function Home() {
     return gridRows;
   };
 
-  const downloadExcel = () => {
-    const [y, m, d] = selectedDate.split('-');
-    const formattedDate = `${d}/${m}/${y}`;
-    const gridRows = [['תאריך:', formattedDate], [], ...buildGridRows()];
-    const ws = XLSX.utils.aoa_to_sheet(gridRows);
+  // Gathers every date that has at least one team assigned, oldest to newest.
+  const getDatedSchedules = async (): Promise<[string, string[][]][]> => {
+    const schedules = await fetchAllSchedules();
+    return Object.entries(schedules)
+      .filter(([, c]) => c.some(slot => slot.length > 0))
+      .sort(([a], [b]) => a.localeCompare(b));
+  };
+
+  const downloadExcel = async () => {
+    const datedSchedules = await getDatedSchedules();
+    const wb = XLSX.utils.book_new();
 
     const border = {
       top: { style: 'thin', color: { rgb: '000000' } },
@@ -202,53 +219,65 @@ export default function Home() {
       right: { style: 'thin', color: { rgb: '000000' } },
     };
 
-    const range = XLSX.utils.decode_range(ws['!ref'] ?? 'A1');
-    for (let R = range.s.r; R <= range.e.r; R++) {
-      for (let C = range.s.c; C <= range.e.c; C++) {
-        const addr = XLSX.utils.encode_cell({ r: R, c: C });
-        if (!ws[addr]) ws[addr] = { t: 's', v: '' };
-        ws[addr].s = { border };
-      }
-    }
+    datedSchedules.forEach(([date, schedule]) => {
+      const gridRows = [['תאריך:', formatDate(date)], [], ...buildGridRows(schedule)];
+      const ws = XLSX.utils.aoa_to_sheet(gridRows);
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Schedule');
+      const range = XLSX.utils.decode_range(ws['!ref'] ?? 'A1');
+      for (let R = range.s.r; R <= range.e.r; R++) {
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const addr = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[addr]) ws[addr] = { t: 's', v: '' };
+          ws[addr].s = { border };
+        }
+      }
+
+      // Sheet names can't contain : \ / ? * [ ] and are capped at 31 chars.
+      const sheetName = date.split('-').reverse().join('-');
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    });
+
     XLSX.writeFile(wb, 'schedule.xlsx');
   };
 
   const downloadPDF = async () => {
-    const gridRows = buildGridRows();
-
-    const div = document.createElement('div');
-    div.style.cssText = 'position:absolute;left:-9999px;direction:rtl;font-family:Arial,sans-serif;background:white;padding:20px;width:700px;';
-
-    const tableRows = gridRows.map((row, i) => {
-      const isHeader = i === 0;
-      const isTimeSlot = i > 0 && row[1] === '' && row[0] !== '';
-      const bg = isHeader ? '#6d28d9' : isTimeSlot ? '#ede9fe' : i % 2 === 0 ? '#f9f9f9' : 'white';
-      const color = isHeader ? 'white' : '#1f2937';
-      const fontWeight = isHeader || isTimeSlot ? 'bold' : 'normal';
-      const cells = row.map(cell =>
-        `<td style="border:1px solid #ccc;padding:7px 10px;text-align:center;font-weight:${fontWeight};color:${color};">${cell}</td>`
-      ).join('');
-      return `<tr style="background:${bg};">${cells}</tr>`;
-    }).join('');
-
-    const [y, m, d] = selectedDate.split('-');
-    const formattedDate = `${d}/${m}/${y}`;
-    div.innerHTML = `
-      <h2 style="margin-bottom:12px;font-size:15px;">לוח זמנים - ${formattedDate}</h2>
-      <table style="border-collapse:collapse;width:100%;font-size:12px;">${tableRows}</table>
-    `;
-
-    document.body.appendChild(div);
-    const canvas = await html2canvas(div, { scale: 2 });
-    document.body.removeChild(div);
-
+    const datedSchedules = await getDatedSchedules();
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const imgWidth = 190;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-    doc.addImage(canvas.toDataURL('image/png'), 'PNG', 10, 10, imgWidth, imgHeight);
+
+    for (let i = 0; i < datedSchedules.length; i++) {
+      const [date, schedule] = datedSchedules[i];
+      const gridRows = buildGridRows(schedule);
+
+      const div = document.createElement('div');
+      div.style.cssText = 'position:absolute;left:-9999px;direction:rtl;font-family:Arial,sans-serif;background:white;padding:20px;width:700px;';
+
+      const tableRows = gridRows.map((row, r) => {
+        const isHeader = r === 0;
+        const isTimeSlot = r > 0 && row[1] === '' && row[0] !== '';
+        const bg = isHeader ? '#6d28d9' : isTimeSlot ? '#ede9fe' : r % 2 === 0 ? '#f9f9f9' : 'white';
+        const color = isHeader ? 'white' : '#1f2937';
+        const fontWeight = isHeader || isTimeSlot ? 'bold' : 'normal';
+        const cells = row.map(cell =>
+          `<td style="border:1px solid #ccc;padding:7px 10px;text-align:center;font-weight:${fontWeight};color:${color};">${cell}</td>`
+        ).join('');
+        return `<tr style="background:${bg};">${cells}</tr>`;
+      }).join('');
+
+      div.innerHTML = `
+        <h2 style="margin-bottom:12px;font-size:15px;">לוח זמנים - ${formatDate(date)}</h2>
+        <table style="border-collapse:collapse;width:100%;font-size:12px;">${tableRows}</table>
+      `;
+
+      document.body.appendChild(div);
+      const canvas = await html2canvas(div, { scale: 2 });
+      document.body.removeChild(div);
+
+      if (i > 0) doc.addPage();
+      const imgWidth = 190;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      doc.addImage(canvas.toDataURL('image/png'), 'PNG', 10, 10, imgWidth, imgHeight);
+    }
+
     doc.save('schedule.pdf');
   };
 
