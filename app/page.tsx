@@ -385,12 +385,13 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-full bg-gray-50">
+    <div data-testid="app-container" className="flex flex-col md:flex-row h-full bg-gray-50">
       {/* Main grid area */}
-      <main className="flex-1 overflow-y-auto p-3 sm:p-6 order-2 md:order-1">
+      <main data-testid="main-content" className="flex-1 overflow-y-auto p-3 sm:p-6 order-2 md:order-1">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4 sm:mb-6">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">ניהול זמני מגרש</h1>
+          <h1 data-testid="page-title" className="text-xl sm:text-2xl font-bold text-gray-800">ניהול זמני מגרש</h1>
           <input
+            data-testid="date-picker"
             type="date"
             value={selectedDate}
             onChange={e => setSelectedDate(e.target.value)}
@@ -400,14 +401,14 @@ export default function Home() {
 
         <div className="space-y-8">
           {TIME_SLOTS.map((time, timeSlotIndex) => (
-            <section key={timeSlotIndex}>
-              <h2 className="text-lg font-semibold text-gray-700 mb-3 pb-1 border-b border-gray-200">
+            <section key={timeSlotIndex} data-testid={`time-slot-section-${timeSlotIndex}`}>
+              <h2 data-testid={`time-slot-header-${timeSlotIndex}`} className="text-lg font-semibold text-gray-700 mb-3 pb-1 border-b border-gray-200">
                 {time}
               </h2>
               <div className={`grid grid-cols-2 ${FIELD_COLS_CLASS[fields.length] ?? 'sm:grid-cols-4'} gap-3 sm:gap-6`}>
                 {fields.map(field => (
-                  <div key={field} className="flex flex-col items-center gap-2">
-                    <h3 className="text-sm font-semibold text-gray-600">{field}</h3>
+                  <div key={field} data-testid={`field-column-${timeSlotIndex}-${field}`} className="flex flex-col items-center gap-2">
+                    <h3 data-testid={`field-name-${timeSlotIndex}-${field}`} className="text-sm font-semibold text-gray-600">{field}</h3>
                     <div
                       onDrop={e => onDrop(e, field, timeSlotIndex)}
                       onDragOver={e => e.preventDefault()}
@@ -422,6 +423,7 @@ export default function Home() {
                         backgroundPosition: 'center',
                         touchAction: 'manipulation',
                       }}
+                      data-testid={`drop-zone-${timeSlotIndex}-${field}`}
                       className={`w-full min-h-32 sm:min-h-40 rounded-xl border-2 border-dashed flex flex-col gap-1.5 p-2 transition-colors hover:border-blue-400 hover:bg-blue-50/30 ${selectedTeam ? 'border-blue-400 bg-blue-50/30' : 'border-gray-300 bg-white'}`}
                     >
                       {(containers[field]?.[timeSlotIndex] ?? []).map((team, i) => (
@@ -433,6 +435,7 @@ export default function Home() {
                           }}
                           title="לחץ פעמיים להסרה"
                           style={{ touchAction: 'manipulation' }}
+                          data-testid={`assigned-team-${timeSlotIndex}-${field}-${team}`}
                           className="bg-white/90 text-gray-800 text-xs font-bold rounded-lg px-2 py-1.5 text-center cursor-pointer shadow-sm hover:bg-red-50 hover:text-red-600 transition-colors"
                         >
                           {team}
@@ -450,6 +453,7 @@ export default function Home() {
       {/* Scalable Sidebar */}
       <aside
         style={isDesktop ? { width: sidebarWidth } : undefined}
+        data-testid="sidebar"
         className="w-full md:w-auto shrink-0 bg-white border-b md:border-b-0 md:border-r border-gray-200 shadow-sm flex flex-col relative h-auto md:h-full order-1 md:order-2"
       >
         {/* Resize handle (desktop only) */}
@@ -458,11 +462,11 @@ export default function Home() {
           className="hidden md:block absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-blue-400 transition-colors z-10"
         />
         <div className="px-4 py-3 border-b border-gray-100">
-          <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide">קבוצות</h2>
+          <h2 data-testid="sidebar-title" className="text-sm font-bold text-gray-700 uppercase tracking-wide">קבוצות</h2>
         </div>
 
         {/* Teams list — horizontal scroll on mobile, vertical on desktop */}
-        <div className="flex flex-row md:flex-col overflow-x-auto md:overflow-y-auto flex-1 gap-1.5 p-3 w-full">
+        <div data-testid="teams-list" className="flex flex-row md:flex-col overflow-x-auto md:overflow-y-auto flex-1 gap-1.5 p-3 w-full">
           {teams.map((team, i) => (
             <div
               key={i}
@@ -470,6 +474,7 @@ export default function Home() {
               onDragStart={e => onDragStart(e, team)}
               onClick={() => setSelectedTeam(t => (t === team ? null : team))}
               style={{ touchAction: 'manipulation' }}
+              data-testid={`team-item-${team}`}
               className={`shrink-0 border font-semibold text-sm rounded-lg px-3 py-2 cursor-grab active:cursor-grabbing transition-colors text-center select-none whitespace-nowrap ${
                 selectedTeam === team
                   ? 'bg-red-500 border-red-600 text-white ring-2 ring-red-300'
@@ -484,30 +489,35 @@ export default function Home() {
         {/* Action buttons — pinned to bottom */}
         <div className="p-3 border-t border-gray-100 space-y-2">
           <button
+            data-testid="btn-manage-teams"
             onClick={() => setManageOpen(true)}
             className="w-full text-sm py-2 rounded-lg bg-purple-500 hover:bg-purple-600 text-white font-medium transition-colors"
           >
             ניהול קבוצות
           </button>
           <button
+            data-testid="btn-manage-fields"
             onClick={() => setManageFieldsOpen(true)}
             className="w-full text-sm py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white font-medium transition-colors"
           >
             ניהול מגרשים
           </button>
           <button
+            data-testid="btn-export-excel"
             onClick={downloadExcel}
             className="w-full text-sm py-2 rounded-lg bg-cyan-500 hover:bg-cyan-600 text-white font-medium transition-colors"
           >
             ייצוא Excel
           </button>
           <button
+            data-testid="btn-export-pdf"
             onClick={downloadPDF}
             className="w-full text-sm py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium transition-colors"
           >
             ייצוא PDF
           </button>
           <button
+            data-testid="btn-clear-all"
             onClick={() => { setClearSpecificDate(selectedDate); setClearDialogOpen(true); }}
             className="w-full text-sm py-2 rounded-lg bg-yellow-400 hover:bg-yellow-500 text-gray-800 font-medium transition-colors"
           >
@@ -518,41 +528,43 @@ export default function Home() {
 
       {/* Manage Teams Modal */}
       {manageOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setManageOpen(false); setConfirmRemove(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-[90vw] sm:w-96 max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div data-testid="manage-teams-overlay" className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setManageOpen(false); setConfirmRemove(null); }}>
+          <div data-testid="manage-teams-modal" className="bg-white rounded-2xl shadow-2xl w-[90vw] sm:w-96 max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
             {/* Modal header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h2 className="text-base font-bold text-gray-800">ניהול קבוצות</h2>
-              <button onClick={() => { setManageOpen(false); setConfirmRemove(null); }} className="text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none">✕</button>
+              <h2 data-testid="manage-teams-title" className="text-base font-bold text-gray-800">ניהול קבוצות</h2>
+              <button data-testid="manage-teams-close" onClick={() => { setManageOpen(false); setConfirmRemove(null); }} className="text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none">✕</button>
             </div>
 
             {/* Teams list */}
-            <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
+            <div data-testid="manage-teams-list" className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
               {teams.map((team, i) => (
-                <div key={i} className="flex items-center bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 gap-2">
+                <div key={i} data-testid={`manage-team-row-${team}`} className="flex items-center bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 gap-2">
                   {editingTeam?.original === team ? (
                     <>
                       <input
+                        data-testid={`edit-team-input-${team}`}
                         autoFocus
                         value={editingTeam.value}
                         onChange={e => setEditingTeam({ ...editingTeam, value: e.target.value })}
                         onKeyDown={e => { if (e.key === 'Enter') renameTeam(); if (e.key === 'Escape') setEditingTeam(null); }}
                         className="flex-1 text-sm border border-purple-300 rounded-md px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-purple-400"
                       />
-                      <button onClick={renameTeam} className="text-xs bg-purple-500 hover:bg-purple-600 text-white rounded-md px-2 py-0.5 transition-colors">שמור</button>
-                      <button onClick={() => setEditingTeam(null)} className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md px-2 py-0.5 transition-colors">ביטול</button>
+                      <button data-testid={`edit-team-save-${team}`} onClick={renameTeam} className="text-xs bg-purple-500 hover:bg-purple-600 text-white rounded-md px-2 py-0.5 transition-colors">שמור</button>
+                      <button data-testid={`edit-team-cancel-${team}`} onClick={() => setEditingTeam(null)} className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md px-2 py-0.5 transition-colors">ביטול</button>
                     </>
                   ) : (
                     <>
-                      <span className="text-sm font-medium text-gray-800 flex-1">{team}</span>
+                      <span data-testid={`team-name-${team}`} className="text-sm font-medium text-gray-800 flex-1">{team}</span>
                       {confirmRemove === team ? (
                         <div className="flex items-center gap-1">
-                          <button onClick={() => { removeTeam(team); setConfirmRemove(null); }} className="text-xs bg-red-500 hover:bg-red-600 text-white rounded-md px-2 py-0.5 transition-colors">הסר</button>
-                          <button onClick={() => setConfirmRemove(null)} className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md px-2 py-0.5 transition-colors">ביטול</button>
+                          <button data-testid={`confirm-remove-team-${team}`} onClick={() => { removeTeam(team); setConfirmRemove(null); }} className="text-xs bg-red-500 hover:bg-red-600 text-white rounded-md px-2 py-0.5 transition-colors">הסר</button>
+                          <button data-testid={`cancel-remove-team-${team}`} onClick={() => setConfirmRemove(null)} className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md px-2 py-0.5 transition-colors">ביטול</button>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">
                           <button
+                            data-testid={`btn-edit-team-${team}`}
                             onClick={() => { setConfirmRemove(null); setEditingTeam({ original: team, value: team }); }}
                             className="text-gray-400 hover:text-purple-500 hover:bg-purple-50 rounded-full w-6 h-6 flex items-center justify-center transition-colors text-sm"
                             title="ערוך שם"
@@ -560,6 +572,7 @@ export default function Home() {
                             ✎
                           </button>
                           <button
+                            data-testid={`btn-remove-team-${team}`}
                             onClick={() => { setEditingTeam(null); setConfirmRemove(team); }}
                             className="text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full w-6 h-6 flex items-center justify-center transition-colors text-lg leading-none"
                             title="הסר קבוצה"
@@ -578,6 +591,7 @@ export default function Home() {
             <div className="px-5 py-4 border-t border-gray-100">
               <div className="flex gap-2">
                 <input
+                  data-testid="add-team-input"
                   type="text"
                   value={newTeamInput}
                   onChange={e => setNewTeamInput(e.target.value)}
@@ -586,6 +600,7 @@ export default function Home() {
                   className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-400"
                 />
                 <button
+                  data-testid="add-team-submit"
                   onClick={addTeam}
                   className="bg-purple-500 hover:bg-purple-600 text-white rounded-lg px-3 py-2 text-sm font-bold transition-colors"
                 >
@@ -599,41 +614,43 @@ export default function Home() {
 
       {/* Manage Fields Modal */}
       {manageFieldsOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setManageFieldsOpen(false); setConfirmRemoveField(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-[90vw] sm:w-96 max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div data-testid="manage-fields-overlay" className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setManageFieldsOpen(false); setConfirmRemoveField(null); }}>
+          <div data-testid="manage-fields-modal" className="bg-white rounded-2xl shadow-2xl w-[90vw] sm:w-96 max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
             {/* Modal header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h2 className="text-base font-bold text-gray-800">ניהול מגרשים</h2>
-              <button onClick={() => { setManageFieldsOpen(false); setConfirmRemoveField(null); }} className="text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none">✕</button>
+              <h2 data-testid="manage-fields-title" className="text-base font-bold text-gray-800">ניהול מגרשים</h2>
+              <button data-testid="manage-fields-close" onClick={() => { setManageFieldsOpen(false); setConfirmRemoveField(null); }} className="text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none">✕</button>
             </div>
 
             {/* Fields list */}
-            <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
+            <div data-testid="manage-fields-list" className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
               {fields.map((field, i) => (
-                <div key={i} className="flex items-center bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 gap-2">
+                <div key={i} data-testid={`manage-field-row-${field}`} className="flex items-center bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 gap-2">
                   {editingField?.original === field ? (
                     <>
                       <input
+                        data-testid={`edit-field-input-${field}`}
                         autoFocus
                         value={editingField.value}
                         onChange={e => setEditingField({ ...editingField, value: e.target.value })}
                         onKeyDown={e => { if (e.key === 'Enter') renameField(); if (e.key === 'Escape') setEditingField(null); }}
                         className="flex-1 text-sm border border-indigo-300 rounded-md px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
                       />
-                      <button onClick={renameField} className="text-xs bg-indigo-500 hover:bg-indigo-600 text-white rounded-md px-2 py-0.5 transition-colors">שמור</button>
-                      <button onClick={() => setEditingField(null)} className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md px-2 py-0.5 transition-colors">ביטול</button>
+                      <button data-testid={`edit-field-save-${field}`} onClick={renameField} className="text-xs bg-indigo-500 hover:bg-indigo-600 text-white rounded-md px-2 py-0.5 transition-colors">שמור</button>
+                      <button data-testid={`edit-field-cancel-${field}`} onClick={() => setEditingField(null)} className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md px-2 py-0.5 transition-colors">ביטול</button>
                     </>
                   ) : (
                     <>
-                      <span className="text-sm font-medium text-gray-800 flex-1">{field}</span>
+                      <span data-testid={`field-name-manage-${field}`} className="text-sm font-medium text-gray-800 flex-1">{field}</span>
                       {confirmRemoveField === field ? (
                         <div className="flex items-center gap-1">
-                          <button onClick={() => { removeField(field); setConfirmRemoveField(null); }} className="text-xs bg-red-500 hover:bg-red-600 text-white rounded-md px-2 py-0.5 transition-colors">הסר</button>
-                          <button onClick={() => setConfirmRemoveField(null)} className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md px-2 py-0.5 transition-colors">ביטול</button>
+                          <button data-testid={`confirm-remove-field-${field}`} onClick={() => { removeField(field); setConfirmRemoveField(null); }} className="text-xs bg-red-500 hover:bg-red-600 text-white rounded-md px-2 py-0.5 transition-colors">הסר</button>
+                          <button data-testid={`cancel-remove-field-${field}`} onClick={() => setConfirmRemoveField(null)} className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md px-2 py-0.5 transition-colors">ביטול</button>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">
                           <button
+                            data-testid={`btn-edit-field-${field}`}
                             onClick={() => { setConfirmRemoveField(null); setEditingField({ original: field, value: field }); }}
                             className="text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-full w-6 h-6 flex items-center justify-center transition-colors text-sm"
                             title="ערוך שם"
@@ -641,6 +658,7 @@ export default function Home() {
                             ✎
                           </button>
                           <button
+                            data-testid={`btn-remove-field-${field}`}
                             onClick={() => { setEditingField(null); setConfirmRemoveField(field); }}
                             className="text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full w-6 h-6 flex items-center justify-center transition-colors text-lg leading-none"
                             title="הסר מגרש"
@@ -659,6 +677,7 @@ export default function Home() {
             <div className="px-5 py-4 border-t border-gray-100">
               <div className="flex gap-2">
                 <input
+                  data-testid="add-field-input"
                   type="text"
                   value={newFieldInput}
                   onChange={e => setNewFieldInput(e.target.value)}
@@ -667,6 +686,7 @@ export default function Home() {
                   className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400"
                 />
                 <button
+                  data-testid="add-field-submit"
                   onClick={addField}
                   className="bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-bold transition-colors"
                 >
@@ -680,8 +700,8 @@ export default function Home() {
 
       {/* Clear Schedule Dialog */}
       {clearDialogOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={closeClearDialog}>
-          <div className="bg-white rounded-2xl shadow-2xl w-[85vw] sm:w-80 p-6 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+        <div data-testid="clear-dialog-overlay" className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={closeClearDialog}>
+          <div data-testid="clear-dialog-modal" className="bg-white rounded-2xl shadow-2xl w-[85vw] sm:w-80 p-6 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
             {clearMode === 'menu' && (
               <>
                 <div className="flex flex-col items-center gap-2 text-center">
@@ -691,24 +711,28 @@ export default function Home() {
                 </div>
                 <div className="flex flex-col gap-2">
                   <button
+                    data-testid="clear-current-date"
                     onClick={() => setClearMode('current')}
                     className="py-2 rounded-xl bg-yellow-400 hover:bg-yellow-500 text-gray-800 text-sm font-semibold transition-colors"
                   >
                     נקה יום נוכחי ({formatDate(selectedDate)})
                   </button>
                   <button
+                    data-testid="clear-specific-date"
                     onClick={() => setClearMode('specific')}
                     className="py-2 rounded-xl bg-yellow-400 hover:bg-yellow-500 text-gray-800 text-sm font-semibold transition-colors"
                   >
                     נקה תאריך ספציפי
                   </button>
                   <button
+                    data-testid="clear-all-dates"
                     onClick={() => setClearMode('all')}
                     className="py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors"
                   >
                     נקה את כל התאריכים
                   </button>
                   <button
+                    data-testid="clear-cancel"
                     onClick={closeClearDialog}
                     className="py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold transition-colors"
                   >
@@ -727,12 +751,14 @@ export default function Home() {
                 </div>
                 <div className="flex gap-2">
                   <button
+                    data-testid="clear-current-confirm"
                     onClick={() => clearDate(selectedDate)}
                     className="flex-1 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors"
                   >
                     נקה
                   </button>
                   <button
+                    data-testid="clear-current-back"
                     onClick={() => setClearMode('menu')}
                     className="flex-1 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold transition-colors"
                   >
@@ -750,6 +776,7 @@ export default function Home() {
                   <p className="text-sm text-gray-500">פעולה זו תסיר את כל הקבוצות מהתאריך שנבחר. לא ניתן לבטל.</p>
                 </div>
                 <input
+                  data-testid="clear-specific-date-picker"
                   type="date"
                   value={clearSpecificDate}
                   onChange={e => setClearSpecificDate(e.target.value)}
@@ -757,12 +784,14 @@ export default function Home() {
                 />
                 <div className="flex gap-2">
                   <button
+                    data-testid="clear-specific-confirm"
                     onClick={() => clearDate(clearSpecificDate)}
                     className="flex-1 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors"
                   >
                     נקה
                   </button>
                   <button
+                    data-testid="clear-specific-back"
                     onClick={() => setClearMode('menu')}
                     className="flex-1 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold transition-colors"
                   >
@@ -781,6 +810,7 @@ export default function Home() {
                   <p className="text-sm text-gray-500">כדי לאשר, הקלד/י <span className="font-bold">מחק הכל</span></p>
                 </div>
                 <input
+                  data-testid="clear-all-confirm-input"
                   type="text"
                   value={clearAllConfirmText}
                   onChange={e => setClearAllConfirmText(e.target.value)}
@@ -788,6 +818,7 @@ export default function Home() {
                 />
                 <div className="flex gap-2">
                   <button
+                    data-testid="clear-all-confirm-btn"
                     onClick={clearAllDates}
                     disabled={clearAllConfirmText.trim() !== 'מחק הכל'}
                     className="flex-1 py-2 rounded-xl bg-red-500 hover:bg-red-600 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
@@ -795,6 +826,7 @@ export default function Home() {
                     מחק הכל
                   </button>
                   <button
+                    data-testid="clear-all-back"
                     onClick={() => { setClearMode('menu'); setClearAllConfirmText(''); }}
                     className="flex-1 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold transition-colors"
                   >
