@@ -96,7 +96,10 @@ export default function Home() {
   const [newFieldInput, setNewFieldInput] = useState('');
   const [confirmRemoveField, setConfirmRemoveField] = useState<string | null>(null);
   const [editingField, setEditingField] = useState<{ original: string; value: string } | null>(null);
-  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearMode, setClearMode] = useState<'menu' | 'current' | 'specific' | 'all'>('menu');
+  const [clearSpecificDate, setClearSpecificDate] = useState(selectedDate);
+  const [clearAllConfirmText, setClearAllConfirmText] = useState('');
   const [editingTeam, setEditingTeam] = useState<{ original: string; value: string } | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -362,11 +365,23 @@ export default function Home() {
     doc.save('schedule.pdf');
   };
 
-  const clearAll = () => {
+  const closeClearDialog = () => {
+    setClearDialogOpen(false);
+    setClearMode('menu');
+    setClearAllConfirmText('');
+  };
+
+  const clearDate = (date: string) => {
     const next = Object.fromEntries(fields.map(f => [f, emptyFieldSlots()]));
-    setContainers(next);
-    saveSchedule(selectedDate, next);
-    setClearConfirmOpen(false);
+    if (date === selectedDate) setContainers(next);
+    saveSchedule(date, next);
+    closeClearDialog();
+  };
+
+  const clearAllDates = async () => {
+    await fetch(`${BASE_PATH}/api/schedules`, { method: 'DELETE' }).catch(() => {});
+    setContainers(Object.fromEntries(fields.map(f => [f, emptyFieldSlots()])));
+    closeClearDialog();
   };
 
   return (
@@ -493,7 +508,7 @@ export default function Home() {
             ייצוא PDF
           </button>
           <button
-            onClick={() => setClearConfirmOpen(true)}
+            onClick={() => { setClearSpecificDate(selectedDate); setClearDialogOpen(true); }}
             className="w-full text-sm py-2 rounded-lg bg-yellow-400 hover:bg-yellow-500 text-gray-800 font-medium transition-colors"
           >
             נקה הכל
@@ -663,29 +678,131 @@ export default function Home() {
         </div>
       )}
 
-      {/* Clear All Confirmation Modal */}
-      {clearConfirmOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setClearConfirmOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-[85vw] sm:w-72 p-6 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
-            <div className="flex flex-col items-center gap-2 text-center">
-              <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-2xl">⚠️</div>
-              <h2 className="text-base font-bold text-gray-800">נקה את כל המגרשים?</h2>
-              <p className="text-sm text-gray-500">פעולה זו תסיר את כל הקבוצות מהמגרשים. לא ניתן לבטל.</p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={clearAll}
-                className="flex-1 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors"
-              >
-                נקה הכל
-              </button>
-              <button
-                onClick={() => setClearConfirmOpen(false)}
-                className="flex-1 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold transition-colors"
-              >
-                ביטול
-              </button>
-            </div>
+      {/* Clear Schedule Dialog */}
+      {clearDialogOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={closeClearDialog}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[85vw] sm:w-80 p-6 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+            {clearMode === 'menu' && (
+              <>
+                <div className="flex flex-col items-center gap-2 text-center">
+                  <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-2xl">⚠️</div>
+                  <h2 className="text-base font-bold text-gray-800">ניקוי לוח זמנים</h2>
+                  <p className="text-sm text-gray-500">בחר מה לנקות</p>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => setClearMode('current')}
+                    className="py-2 rounded-xl bg-yellow-400 hover:bg-yellow-500 text-gray-800 text-sm font-semibold transition-colors"
+                  >
+                    נקה יום נוכחי ({formatDate(selectedDate)})
+                  </button>
+                  <button
+                    onClick={() => setClearMode('specific')}
+                    className="py-2 rounded-xl bg-yellow-400 hover:bg-yellow-500 text-gray-800 text-sm font-semibold transition-colors"
+                  >
+                    נקה תאריך ספציפי
+                  </button>
+                  <button
+                    onClick={() => setClearMode('all')}
+                    className="py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors"
+                  >
+                    נקה את כל התאריכים
+                  </button>
+                  <button
+                    onClick={closeClearDialog}
+                    className="py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold transition-colors"
+                  >
+                    ביטול
+                  </button>
+                </div>
+              </>
+            )}
+
+            {clearMode === 'current' && (
+              <>
+                <div className="flex flex-col items-center gap-2 text-center">
+                  <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-2xl">⚠️</div>
+                  <h2 className="text-base font-bold text-gray-800">לנקות את {formatDate(selectedDate)}?</h2>
+                  <p className="text-sm text-gray-500">פעולה זו תסיר את כל הקבוצות מהתאריך הזה. לא ניתן לבטל.</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => clearDate(selectedDate)}
+                    className="flex-1 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors"
+                  >
+                    נקה
+                  </button>
+                  <button
+                    onClick={() => setClearMode('menu')}
+                    className="flex-1 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold transition-colors"
+                  >
+                    חזרה
+                  </button>
+                </div>
+              </>
+            )}
+
+            {clearMode === 'specific' && (
+              <>
+                <div className="flex flex-col items-center gap-2 text-center">
+                  <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-2xl">⚠️</div>
+                  <h2 className="text-base font-bold text-gray-800">נקה תאריך ספציפי</h2>
+                  <p className="text-sm text-gray-500">פעולה זו תסיר את כל הקבוצות מהתאריך שנבחר. לא ניתן לבטל.</p>
+                </div>
+                <input
+                  type="date"
+                  value={clearSpecificDate}
+                  onChange={e => setClearSpecificDate(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => clearDate(clearSpecificDate)}
+                    className="flex-1 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors"
+                  >
+                    נקה
+                  </button>
+                  <button
+                    onClick={() => setClearMode('menu')}
+                    className="flex-1 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold transition-colors"
+                  >
+                    חזרה
+                  </button>
+                </div>
+              </>
+            )}
+
+            {clearMode === 'all' && (
+              <>
+                <div className="flex flex-col items-center gap-2 text-center">
+                  <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center text-2xl">⚠️</div>
+                  <h2 className="text-base font-bold text-gray-800">נקה את כל התאריכים?</h2>
+                  <p className="text-sm text-gray-500">פעולה זו תמחק לצמיתות את כל התאריכים ששמורים במערכת. לא ניתן לבטל.</p>
+                  <p className="text-sm text-gray-500">כדי לאשר, הקלד/י <span className="font-bold">מחק הכל</span></p>
+                </div>
+                <input
+                  type="text"
+                  value={clearAllConfirmText}
+                  onChange={e => setClearAllConfirmText(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={clearAllDates}
+                    disabled={clearAllConfirmText.trim() !== 'מחק הכל'}
+                    className="flex-1 py-2 rounded-xl bg-red-500 hover:bg-red-600 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+                  >
+                    מחק הכל
+                  </button>
+                  <button
+                    onClick={() => { setClearMode('menu'); setClearAllConfirmText(''); }}
+                    className="flex-1 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold transition-colors"
+                  >
+                    חזרה
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

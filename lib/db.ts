@@ -115,6 +115,12 @@ export function saveSchedule(date: string, containers: DateSchedule): Promise<vo
   });
 }
 
+export function clearAllSchedules(): Promise<void> {
+  return withDb(db => {
+    db.schedules = {};
+  });
+}
+
 export function addTeam(name: string): Promise<string[]> {
   return withDb(db => {
     if (!db.teams.includes(name)) db.teams.push(name);
