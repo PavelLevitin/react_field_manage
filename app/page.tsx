@@ -103,6 +103,8 @@ export default function Home() {
   const [editingTeam, setEditingTeam] = useState<{ original: string; value: string } | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [tooltip, setTooltip] = useState<{ msg: string; field: string; slot: number } | null>(null);
+  const tooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isResizing = useRef(false);
   const lastTap = useRef<{ key: string; time: number } | null>(null);
   const isFirstDateLoad = useRef(true);
@@ -182,9 +184,23 @@ export default function Home() {
     e.dataTransfer.setData('team', team);
   };
 
+  const showTooltip = (msg: string, field: string, slot: number) => {
+    if (tooltipTimer.current) clearTimeout(tooltipTimer.current);
+    setTooltip({ msg, field, slot });
+    tooltipTimer.current = setTimeout(() => setTooltip(null), 4000);
+  };
+
   const placeTeamInSlot = (team: string, field: string, timeSlotIndex: number) => {
     const currentSlot = containers[field]?.[timeSlotIndex] ?? [];
-    if (!team || currentSlot.includes(team) || currentSlot.length >= 4) return;
+    if (!team) return;
+    if (currentSlot.includes(team)) {
+      showTooltip(`כבר הוספת את הקבוצה - ${team}`, field, timeSlotIndex);
+      return;
+    }
+    if (currentSlot.length >= 4) {
+      showTooltip('לא ניתן לשייך יותר מ 4 קבוצות למגרש', field, timeSlotIndex);
+      return;
+    }
     const next: DateSchedule = {};
     for (const f of fields) {
       next[f] = (containers[f] ?? emptyFieldSlots()).map(slot => [...slot]);
@@ -388,8 +404,8 @@ export default function Home() {
     <div data-testid="app-container" className="flex flex-col md:flex-row h-full bg-gray-50">
       {/* Main grid area */}
       <main data-testid="main-content" className="flex-1 overflow-y-auto p-3 sm:p-6 order-2 md:order-1">
+        <h1 data-testid="page-title" className="text-xl sm:text-2xl font-bold text-gray-800 text-center mb-2">ניהול זמני מגרש</h1>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4 sm:mb-6">
-          <h1 data-testid="page-title" className="text-xl sm:text-2xl font-bold text-gray-800">ניהול זמני מגרש</h1>
           <input
             data-testid="date-picker"
             type="date"
@@ -407,7 +423,16 @@ export default function Home() {
               </h2>
               <div className={`grid grid-cols-2 ${FIELD_COLS_CLASS[fields.length] ?? 'sm:grid-cols-4'} gap-3 sm:gap-6`}>
                 {fields.map(field => (
-                  <div key={field} data-testid={`field-column-${timeSlotIndex}-${field}`} className="flex flex-col items-center gap-2">
+                  <div key={field} data-testid={`field-column-${timeSlotIndex}-${field}`} className="relative flex flex-col items-center gap-2">
+                    {tooltip && tooltip.field === field && tooltip.slot === timeSlotIndex && (
+                      <div
+                        data-testid="tooltip"
+                        role="alert"
+                        className="absolute -top-10 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-3 py-2 rounded-lg shadow-lg text-xs font-medium z-50 whitespace-nowrap"
+                      >
+                        {tooltip.msg}
+                      </div>
+                    )}
                     <h3 data-testid={`field-name-${timeSlotIndex}-${field}`} className="text-sm font-semibold text-gray-600">{field}</h3>
                     <div
                       onDrop={e => onDrop(e, field, timeSlotIndex)}
@@ -488,6 +513,7 @@ export default function Home() {
 
         {/* Action buttons — pinned to bottom */}
         <div className="p-3 border-t border-gray-100 space-y-2">
+          <h2 data-testid="management-title" className="text-center text-lg font-bold text-gray-700">ניהול</h2>
           <button
             data-testid="btn-manage-teams"
             onClick={() => setManageOpen(true)}
