@@ -549,6 +549,13 @@ export default function Home() {
           >
             נקה הכל
           </button>
+          <button
+            data-testid="btn-broadcast"
+            onClick={() => window.open(`${BASE_PATH}/broadcast`, '_blank')}
+            className="w-full text-sm py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white font-medium transition-colors"
+          >
+            מסך שידור
+          </button>
         </div>
       </aside>
 
