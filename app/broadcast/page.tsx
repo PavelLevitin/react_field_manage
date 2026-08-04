@@ -40,10 +40,44 @@ function formatShortDate(date: string): string {
   return `${d}/${m}`;
 }
 
+// Daily view table - used for today & choose modes
 function ScheduleTable({ schedule, fields }: { schedule: DateSchedule; fields: string[] }) {
   return (
-    <div className="flex-1 min-h-0 overflow-hidden">
-      <table className="w-full h-full border-collapse text-center">
+    <div className="flex-1 min-h-0 overflow-auto sm:overflow-hidden">
+      {/* Mobile: card layout */}
+      <div className="sm:hidden flex flex-col gap-3">
+        {TIME_SLOTS.map((time, slotIdx) => (
+          <div key={slotIdx} className="rounded-lg overflow-hidden" style={{ border: '1px solid #333' }}>
+            <div className="px-3 py-2 text-sm font-bold text-center" style={{ backgroundColor: '#1a1a1a', color: '#fcb900' }}>
+              {time}
+            </div>
+            <div className="grid grid-cols-2 gap-px" style={{ backgroundColor: '#333' }}>
+              {fields.map(field => {
+                const teams = schedule[field]?.[slotIdx] ?? [];
+                return (
+                  <div key={field} className="p-2 flex flex-col gap-1" style={{ backgroundColor: '#111' }}>
+                    <div className="text-xs font-bold text-center rounded px-1 py-0.5" style={{ backgroundColor: '#cf2e2e', color: '#fff' }}>
+                      {field}
+                    </div>
+                    {teams.map((team, i) => (
+                      <div
+                        key={i}
+                        className="text-xs font-semibold text-center rounded px-1 py-0.5"
+                        style={{ backgroundColor: '#32373c', color: '#fff' }}
+                      >
+                        {team}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop: table layout */}
+      <table className="hidden sm:table w-full h-full border-collapse text-center">
         <thead>
           <tr>
             <th className="p-2 text-base font-bold border min-w-[130px]" style={{ color: '#fff', borderColor: '#333', backgroundColor: '#1a1a1a' }}>
@@ -160,19 +194,20 @@ export default function BroadcastPage() {
   const hasDisplayData = displaySchedule && Object.values(displaySchedule).some(slots => slots.some(s => s.length > 0));
 
   return (
-    <div className="h-dvh max-h-dvh flex flex-col text-white p-3 sm:p-4 overflow-hidden" style={{ backgroundColor: '#000' }}>
+    <div className="h-dvh max-h-dvh flex flex-col text-white p-2 sm:p-4 overflow-hidden" style={{ backgroundColor: '#000' }}>
       {/* Header */}
-      <div className="relative flex items-center justify-end gap-3 mb-2 shrink-0">
-        <h1 className="text-xl sm:text-2xl font-bold absolute left-1/2 -translate-x-1/2" style={{ color: '#fff' }}>{VIEW_TITLES[viewMode]}</h1>
+      <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 mb-2 shrink-0">
+        {/* Title - centered on desktop, top on mobile */}
+        <h1 className="text-lg sm:text-2xl font-bold sm:absolute sm:left-1/2 sm:-translate-x-1/2 order-1" style={{ color: '#fff' }}>{VIEW_TITLES[viewMode]}</h1>
 
-        <div className="flex items-center gap-3 flex-wrap justify-center">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-center order-2 sm:ml-auto">
           {/* Toggle */}
-          <div className="flex items-center rounded-full p-1" style={{ backgroundColor: '#1a1a1a', border: '1px solid #333' }}>
+          <div className="flex items-center rounded-full p-0.5 sm:p-1" style={{ backgroundColor: '#1a1a1a', border: '1px solid #333' }}>
             {(['today', 'choose', 'weekly'] as ViewMode[]).map(mode => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
-                className="px-5 py-2 rounded-full text-sm font-semibold transition-all duration-300"
+                className="px-3 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-semibold transition-all duration-300"
                 style={viewMode === mode
                   ? { backgroundColor: '#cf2e2e', color: '#fff', boxShadow: '0 4px 15px rgba(207,46,46,0.3)' }
                   : { color: '#abb8c3' }
@@ -188,19 +223,19 @@ export default function BroadcastPage() {
               type="date"
               value={chosenDate}
               onChange={e => setChosenDate(e.target.value)}
-              className="rounded-full px-4 py-2 text-sm text-white focus:outline-none [color-scheme:dark]"
+              className="rounded-full px-3 py-1.5 text-xs sm:text-sm text-white focus:outline-none [color-scheme:dark]"
               style={{ backgroundColor: '#1a1a1a', border: '1px solid #333' }}
             />
           )}
 
-          <div className="text-sm" style={{ color: '#abb8c3' }}>
+          <div className="hidden sm:block text-sm" style={{ color: '#abb8c3' }}>
             עדכון אחרון: {lastUpdate}
           </div>
 
-          {/* Fullscreen toggle */}
+          {/* Fullscreen toggle - hidden on mobile */}
           <button
             onClick={toggleFullscreen}
-            className="w-9 h-9 flex items-center justify-center rounded-full transition-all text-base"
+            className="hidden sm:flex w-9 h-9 items-center justify-center rounded-full transition-all text-base"
             style={{ backgroundColor: '#1a1a1a', border: '1px solid #333', color: '#abb8c3' }}
             title={isFullscreen ? 'צא ממסך מלא' : 'מסך מלא'}
           >
@@ -210,7 +245,7 @@ export default function BroadcastPage() {
           {/* Close button */}
           <button
             onClick={closePage}
-            className="w-9 h-9 flex items-center justify-center rounded-full transition-all text-lg"
+            className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-all text-base sm:text-lg"
             style={{ backgroundColor: '#1a1a1a', border: '1px solid #333', color: '#abb8c3' }}
             title="סגור"
           >
@@ -221,12 +256,12 @@ export default function BroadcastPage() {
 
       {/* Sub-header */}
       {(viewMode === 'today' || viewMode === 'choose') && (
-        <h2 className="text-lg font-bold mb-2 pb-1 shrink-0" style={{ color: '#cf2e2e', borderBottom: '1px solid #333' }}>
+        <h2 className="text-base sm:text-lg font-bold mb-1 sm:mb-2 pb-1 shrink-0" style={{ color: '#cf2e2e', borderBottom: '1px solid #333' }}>
           {viewMode === 'today' ? 'היום' : `יום ${getWeekDay(displayDate)}`} - {formatDate(displayDate)}
         </h2>
       )}
       {viewMode === 'weekly' && (
-        <h2 className="text-lg font-bold mb-2 pb-1 shrink-0" style={{ color: '#cf2e2e', borderBottom: '1px solid #333' }}>
+        <h2 className="text-base sm:text-lg font-bold mb-1 sm:mb-2 pb-1 shrink-0" style={{ color: '#cf2e2e', borderBottom: '1px solid #333' }}>
           {formatDate(weekDays[0])} - {formatDate(weekDays[5])}
         </h2>
       )}
@@ -238,7 +273,7 @@ export default function BroadcastPage() {
             <ScheduleTable schedule={displaySchedule} fields={fields} />
           ) : (
             <div className="flex-1 flex items-center justify-center">
-              <p className="text-2xl" style={{ color: '#abb8c3' }}>
+              <p className="text-lg sm:text-2xl text-center" style={{ color: '#abb8c3' }}>
                 אין אימונים מתוזמנים ל{formatDate(displayDate)}
               </p>
             </div>
@@ -247,8 +282,57 @@ export default function BroadcastPage() {
       )}
 
       {viewMode === 'weekly' && (
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <table className="w-full h-full border-collapse text-center">
+        <div className="flex-1 min-h-0 overflow-auto sm:overflow-hidden">
+          {/* Mobile: stacked day cards */}
+          <div className="sm:hidden flex flex-col gap-3">
+            {weekDays.map(date => {
+              const daySchedule = schedules[date];
+              const hasData = daySchedule && Object.values(daySchedule).some(slots => slots.some(s => s.length > 0));
+              if (!hasData) return null;
+
+              return (
+                <div key={date} className="rounded-lg overflow-hidden" style={{ border: `1px solid ${date === today ? '#cf2e2e' : '#333'}` }}>
+                  <div
+                    className="px-3 py-2 text-sm font-bold text-center"
+                    style={{ backgroundColor: date === today ? '#cf2e2e' : '#8b1a1a', color: '#fff' }}
+                  >
+                    יום {getWeekDay(date)} - {formatShortDate(date)}
+                  </div>
+                  {TIME_SLOTS.map((time, slotIdx) => {
+                    const slotEntries = fields
+                      .map(field => ({ field, teams: daySchedule?.[field]?.[slotIdx] ?? [] }))
+                      .filter(e => e.teams.length > 0);
+                    if (slotEntries.length === 0) return null;
+
+                    return (
+                      <div key={slotIdx} style={{ borderTop: '1px solid #333' }}>
+                        <div className="px-3 py-1 text-xs font-semibold" style={{ backgroundColor: '#1a1a1a', color: '#fcb900' }}>
+                          {time}
+                        </div>
+                        <div className="grid grid-cols-2 gap-px" style={{ backgroundColor: '#333' }}>
+                          {slotEntries.map(({ field, teams }) => (
+                            <div key={field} className="p-1.5 flex flex-col gap-0.5" style={{ backgroundColor: '#111' }}>
+                              <div className="text-[10px] font-bold text-center rounded px-1 py-0.5" style={{ backgroundColor: '#cf2e2e', color: '#fff' }}>
+                                {field}
+                              </div>
+                              {teams.map((team, i) => (
+                                <div key={i} className="text-xs font-semibold text-center rounded px-1 py-0.5" style={{ backgroundColor: '#32373c', color: '#fff' }}>
+                                  {team}
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop: table layout */}
+          <table className="hidden sm:table w-full h-full border-collapse text-center">
             <thead>
               <tr>
                 <th className="p-2 text-base font-bold border min-w-[110px]" style={{ color: '#fff', borderColor: '#333', backgroundColor: '#1a1a1a' }}>

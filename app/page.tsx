@@ -103,6 +103,8 @@ export default function Home() {
   const [editingTeam, setEditingTeam] = useState<{ original: string; value: string } | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState(0);
   const [tooltip, setTooltip] = useState<{ msg: string; field: string; slot: number } | null>(null);
   const tooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isResizing = useRef(false);
@@ -413,15 +415,94 @@ export default function Home() {
             onChange={e => setSelectedDate(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
+          {/* Time slot select — mobile only */}
+          <select
+            data-testid="time-slot-select"
+            value={selectedSlot}
+            onChange={e => setSelectedSlot(Number(e.target.value))}
+            className="md:hidden border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+          >
+            {TIME_SLOTS.map((time, i) => (
+              <option key={i} value={i}>{time}</option>
+            ))}
+          </select>
+          <button
+            data-testid="btn-settings"
+            onClick={() => setMenuOpen(true)}
+            className="w-13 h-13 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors text-gray-600 hover:text-gray-800"
+            title="ניהול"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7">
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
         </div>
 
-        <div className="space-y-8">
+        {/* Mobile: single time slot view */}
+        <div className="md:hidden">
+          <h2 data-testid={`time-slot-header-${selectedSlot}`} className="text-lg font-semibold text-gray-700 mb-3 pb-1 border-b border-gray-200">
+            {TIME_SLOTS[selectedSlot]}
+          </h2>
+          <div className="grid grid-cols-2 gap-3">
+            {fields.map(field => (
+              <div key={field} data-testid={`field-column-${selectedSlot}-${field}`} className="relative flex flex-col items-center gap-2">
+                {tooltip && tooltip.field === field && tooltip.slot === selectedSlot && (
+                  <div
+                    data-testid="tooltip"
+                    role="alert"
+                    className="absolute -top-10 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-3 py-2 rounded-lg shadow-lg text-xs font-medium z-50 whitespace-nowrap"
+                  >
+                    {tooltip.msg}
+                  </div>
+                )}
+                <h3 data-testid={`field-name-${selectedSlot}-${field}`} className="text-sm font-semibold text-gray-600">{field}</h3>
+                <div
+                  onDrop={e => onDrop(e, field, selectedSlot)}
+                  onDragOver={e => e.preventDefault()}
+                  onClick={() => handleDoubleTap(`slot-${field}-${selectedSlot}`, () => {
+                    if (!selectedTeam) return;
+                    placeTeamInSlot(selectedTeam, field, selectedSlot);
+                    setSelectedTeam(null);
+                  })}
+                  style={{
+                    backgroundImage: `url('${BASE_PATH}/soccer.png')`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    touchAction: 'manipulation',
+                  }}
+                  data-testid={`drop-zone-${selectedSlot}-${field}`}
+                  className={`w-full min-h-32 rounded-xl border-2 border-dashed flex flex-col gap-1.5 p-2 transition-colors hover:border-blue-400 hover:bg-blue-50/30 ${selectedTeam ? 'border-blue-400 bg-blue-50/30' : 'border-gray-300 bg-white'}`}
+                >
+                  {(containers[field]?.[selectedSlot] ?? []).map((team, i) => (
+                    <div
+                      key={i}
+                      onClick={e => {
+                        e.stopPropagation();
+                        handleDoubleTap(`remove-${field}-${selectedSlot}-${team}`, () => removeFromSlot(field, selectedSlot, team));
+                      }}
+                      title="לחץ פעמיים להסרה"
+                      style={{ touchAction: 'manipulation' }}
+                      data-testid={`assigned-team-${selectedSlot}-${field}-${team}`}
+                      className="bg-white/90 text-gray-800 text-xs font-bold rounded-lg px-2 py-1.5 text-center cursor-pointer shadow-sm hover:bg-red-50 hover:text-red-600 transition-colors"
+                    >
+                      {team}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Desktop: all time slots */}
+        <div className="hidden md:block space-y-8">
           {TIME_SLOTS.map((time, timeSlotIndex) => (
             <section key={timeSlotIndex} data-testid={`time-slot-section-${timeSlotIndex}`}>
               <h2 data-testid={`time-slot-header-${timeSlotIndex}`} className="text-lg font-semibold text-gray-700 mb-3 pb-1 border-b border-gray-200">
                 {time}
               </h2>
-              <div className={`grid grid-cols-2 ${FIELD_COLS_CLASS[fields.length] ?? 'sm:grid-cols-4'} gap-3 sm:gap-6`}>
+              <div className={`grid ${FIELD_COLS_CLASS[fields.length] ?? 'sm:grid-cols-4'} gap-6`}>
                 {fields.map(field => (
                   <div key={field} data-testid={`field-column-${timeSlotIndex}-${field}`} className="relative flex flex-col items-center gap-2">
                     {tooltip && tooltip.field === field && tooltip.slot === timeSlotIndex && (
@@ -449,7 +530,7 @@ export default function Home() {
                         touchAction: 'manipulation',
                       }}
                       data-testid={`drop-zone-${timeSlotIndex}-${field}`}
-                      className={`w-full min-h-32 sm:min-h-40 rounded-xl border-2 border-dashed flex flex-col gap-1.5 p-2 transition-colors hover:border-blue-400 hover:bg-blue-50/30 ${selectedTeam ? 'border-blue-400 bg-blue-50/30' : 'border-gray-300 bg-white'}`}
+                      className={`w-full min-h-40 rounded-xl border-2 border-dashed flex flex-col gap-1.5 p-2 transition-colors hover:border-blue-400 hover:bg-blue-50/30 ${selectedTeam ? 'border-blue-400 bg-blue-50/30' : 'border-gray-300 bg-white'}`}
                     >
                       {(containers[field]?.[timeSlotIndex] ?? []).map((team, i) => (
                         <div
@@ -511,52 +592,6 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Action buttons — pinned to bottom */}
-        <div className="p-3 border-t border-gray-100 space-y-2">
-          <h2 data-testid="management-title" className="text-center text-lg font-bold text-gray-700">ניהול</h2>
-          <button
-            data-testid="btn-manage-teams"
-            onClick={() => setManageOpen(true)}
-            className="w-full text-sm py-2 rounded-lg bg-purple-500 hover:bg-purple-600 text-white font-medium transition-colors"
-          >
-            ניהול קבוצות
-          </button>
-          <button
-            data-testid="btn-manage-fields"
-            onClick={() => setManageFieldsOpen(true)}
-            className="w-full text-sm py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white font-medium transition-colors"
-          >
-            ניהול מגרשים
-          </button>
-          <button
-            data-testid="btn-export-excel"
-            onClick={downloadExcel}
-            className="w-full text-sm py-2 rounded-lg bg-cyan-500 hover:bg-cyan-600 text-white font-medium transition-colors"
-          >
-            ייצוא Excel
-          </button>
-          <button
-            data-testid="btn-export-pdf"
-            onClick={downloadPDF}
-            className="w-full text-sm py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium transition-colors"
-          >
-            ייצוא PDF
-          </button>
-          <button
-            data-testid="btn-clear-all"
-            onClick={() => { setClearSpecificDate(selectedDate); setClearDialogOpen(true); }}
-            className="w-full text-sm py-2 rounded-lg bg-yellow-400 hover:bg-yellow-500 text-gray-800 font-medium transition-colors"
-          >
-            נקה הכל
-          </button>
-          <button
-            data-testid="btn-broadcast"
-            onClick={() => window.open(`${BASE_PATH}/broadcast`, '_blank')}
-            className="w-full text-sm py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white font-medium transition-colors"
-          >
-            מסך שידור
-          </button>
-        </div>
       </aside>
 
       {/* Manage Teams Modal */}
@@ -868,6 +903,60 @@ export default function Home() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Mobile hamburger menu */}
+      {menuOpen && (
+        <div data-testid="settings-menu-overlay" className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50" onClick={() => setMenuOpen(false)}>
+          <div data-testid="settings-menu" className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:w-80 max-w-md p-5 space-y-2" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-bold text-gray-800">ניהול</h2>
+              <button onClick={() => setMenuOpen(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+            </div>
+            <button
+              data-testid="btn-manage-teams"
+              onClick={() => { setMenuOpen(false); setManageOpen(true); }}
+              className="w-full text-sm py-2.5 rounded-lg bg-purple-500 hover:bg-purple-600 text-white font-medium transition-colors"
+            >
+              ניהול קבוצות
+            </button>
+            <button
+              data-testid="btn-manage-fields"
+              onClick={() => { setMenuOpen(false); setManageFieldsOpen(true); }}
+              className="w-full text-sm py-2.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white font-medium transition-colors"
+            >
+              ניהול מגרשים
+            </button>
+            <button
+              data-testid="btn-export-excel"
+              onClick={() => { setMenuOpen(false); downloadExcel(); }}
+              className="w-full text-sm py-2.5 rounded-lg bg-cyan-500 hover:bg-cyan-600 text-white font-medium transition-colors"
+            >
+              ייצוא Excel
+            </button>
+            <button
+              data-testid="btn-export-pdf"
+              onClick={() => { setMenuOpen(false); downloadPDF(); }}
+              className="w-full text-sm py-2.5 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium transition-colors"
+            >
+              ייצוא PDF
+            </button>
+            <button
+              data-testid="btn-clear-all"
+              onClick={() => { setMenuOpen(false); setClearSpecificDate(selectedDate); setClearDialogOpen(true); }}
+              className="w-full text-sm py-2.5 rounded-lg bg-yellow-400 hover:bg-yellow-500 text-gray-800 font-medium transition-colors"
+            >
+              נקה הכל
+            </button>
+            <button
+              data-testid="btn-broadcast"
+              onClick={() => { setMenuOpen(false); window.open(`${BASE_PATH}/broadcast`, '_blank'); }}
+              className="w-full text-sm py-2.5 rounded-lg bg-gray-700 hover:bg-gray-800 text-white font-medium transition-colors"
+            >
+              מסך שידור
+            </button>
           </div>
         </div>
       )}
